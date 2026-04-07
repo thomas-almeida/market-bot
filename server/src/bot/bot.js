@@ -108,6 +108,11 @@ async function handleCallback(bot, query) {
   const userId = String(query.from.id);
   const data = query.data;
 
+  // Respondemos imediatamente para remover o "loading" do botão no celular do usuário
+  try {
+    await bot.answerCallbackQuery(query.id).catch(() => {});
+  } catch (e) {}
+
   if (data.startsWith('buy_')) {
     await handleBuy(bot, query, chatId, userId);
   } else if (data.startsWith('check_payment')) {
@@ -129,7 +134,7 @@ async function handleBuy(bot, query, chatId, userId) {
 
   const product = products[productIndex];
   if (!product) {
-    return bot.answerCallbackQuery(query.id, { text: 'Produto inválido.', show_alert: true });
+    return; // Já respondemos o callback lá em cima
   }
 
   try {
@@ -160,11 +165,9 @@ async function handleBuy(bot, query, chatId, userId) {
         ]],
       },
     });
-
-    bot.answerCallbackQuery(query.id);
   } catch (err) {
     console.error('Payment generation error:', err.message);
-    bot.answerCallbackQuery(query.id, { text: 'Erro ao gerar pagamento. Tente novamente.', show_alert: true });
+    await bot.sendMessage(chatId, '❌ Erro ao gerar pagamento. Tente novamente mais tarde.');
   }
 }
 
@@ -172,32 +175,28 @@ async function handleCheckPayment(bot, query, chatId, userId) {
   const parts = query.data.split('|');
   const transactionId = parts[1];
 
-  if (!transactionId) {
-    return bot.answerCallbackQuery(query.id, { text: 'Transação não identificada.', show_alert: true });
-  }
+  if (!transactionId) return;
 
   try {
     console.log('Checking payment for transaction:', transactionId);
     const transaction = await Transaction.findById(transactionId);
 
     if (!transaction) {
-      return bot.answerCallbackQuery(query.id, { text: 'Transação não encontrada.', show_alert: true });
+      await bot.sendMessage(chatId, '❌ Transação não encontrada.');
+      return;
     }
 
     if (transaction.status === 'PAID') {
       // Sempre entregamos o MASTER_DRIVE_LINK através do serviço
       await sendDriveLink(bot, chatId, '');
-      bot.answerCallbackQuery(query.id, { text: 'Pagamento confirmado!', show_alert: false });
     } else if (transaction.status === 'EXPIRED') {
       await bot.sendMessage(chatId, '⏰ Este PIX expirou. Deseja gerar um novo? Clique em um dos produtos acima.');
-      bot.answerCallbackQuery(query.id, { text: 'Este PIX expirou. Gere um novo.', show_alert: false });
     } else {
       await bot.sendMessage(chatId, '⏳ Pagamento ainda não confirmado. Aguarde alguns instantes e tente novamente.');
-      bot.answerCallbackQuery(query.id, { text: 'Aguardando pagamento...', show_alert: false });
     }
   } catch (err) {
     console.error('Check payment error:', err.message);
-    bot.answerCallbackQuery(query.id, { text: 'Erro ao verificar pagamento.', show_alert: true });
+    await bot.sendMessage(chatId, '❌ Erro ao verificar pagamento. Tente novamente.');
   }
 }
 
