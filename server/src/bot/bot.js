@@ -187,10 +187,12 @@ async function handleCheckPayment(bot, query, chatId, userId) {
     if (transaction.status === 'PAID') {
       const config = await BotConfig.getOrCreate();
       const product = config.products[transaction.productIndex];
-      if (product && product.driveLink) {
-        await sendDriveLink(bot, chatId, product.driveLink);
+      const linkToDeliver = transaction.driveLink || product?.driveLink;
+
+      if (linkToDeliver) {
+        await sendDriveLink(bot, chatId, linkToDeliver);
       } else {
-        await bot.sendMessage(chatId, '✅ Pagamento confirmado! Entraremos em contato em breve.');
+        await bot.sendMessage(chatId, '✅ Pagamento confirmado! Entraremos em contato em breve para liberar o seu acesso.');
       }
       bot.answerCallbackQuery(query.id, { text: 'Pagamento confirmado!', show_alert: false });
     } else if (transaction.status === 'EXPIRED') {

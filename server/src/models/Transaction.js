@@ -5,6 +5,7 @@ const TransactionSchema = new mongoose.Schema({
   productIndex: { type: Number, required: true },
   productLabel: { type: String, required: true },
   amount: { type: Number, required: true },
+  driveLink: { type: String }, // Link que será entregue ao usuário
   pixCode: { type: String, required: true },
   pixQrCodeUrl: { type: String, required: true },
   gatewayTransactionId: { type: String, index: true },

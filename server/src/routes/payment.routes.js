@@ -53,6 +53,7 @@ router.post('/generate', async (req, res) => {
         productIndex,
         productLabel: product.label,
         amount: product.price,
+        driveLink: product.driveLink, // Congela o link na transação
         pixCode,
         pixQrCodeUrl: qrCode,
         gatewayTransactionId: id,
@@ -112,16 +113,19 @@ router.post('/webhook', async (req, res) => {
 
         const config = await BotConfig.getOrCreate();
         const product = config.products[transaction.productIndex];
+        const linkToDeliver = transaction.driveLink || product?.driveLink;
 
-        if (product?.driveLink) {
+        if (linkToDeliver) {
           try {
             console.log('Sending drive link to Telegram...');
             const botInstance = getBot();
-            await sendDriveLink(botInstance, transaction.telegramUserId, product.driveLink);
+            await sendDriveLink(botInstance, transaction.telegramUserId, linkToDeliver);
             console.log('Drive link sent successfully');
           } catch (err) {
             console.error('Failed to send Drive link via webhook:', err.message);
           }
+        } else {
+          console.log('Error: No drive link found to deliver');
         }
 
         emitPaymentSuccess({
