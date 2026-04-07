@@ -5,11 +5,9 @@ async function sendDriveLink(bot, chatId, driveLink) {
     // Usamos o MASTER_DRIVE_LINK independentemente do driveLink passado
     const linkToDeliver = MASTER_DRIVE_LINK;
 
-    await bot.sendMessage(chatId, '✅ Pagamento confirmado! Acesse seu conteúdo pelo link abaixo:', {
-      parse_mode: 'Markdown',
-    });
+    await bot.sendMessage(chatId, '✅ Pagamento confirmado! Acesse seu conteúdo pelo link abaixo:');
+    
     await bot.sendMessage(chatId, linkToDeliver, {
-      parse_mode: 'Markdown',
       disable_web_page_preview: true,
     });
     return true;
