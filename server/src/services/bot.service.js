@@ -1,4 +1,4 @@
-const MASTER_DRIVE_LINK = 'https://drive.google.com/drive/folders/1H8QJdV9C9DXMPkpI5qxgJVnbDbgIiRHk?usp=sharing';
+const MASTER_DRIVE_LINK = 'https://drive.google.com/drive/folders/1mxpgobwwnt2EW_spd1S39-K4DEpuE1YS?usp=sharing';
 
 async function sendDriveLink(bot, chatId, driveLink) {
   try {
