@@ -185,15 +185,8 @@ async function handleCheckPayment(bot, query, chatId, userId) {
     }
 
     if (transaction.status === 'PAID') {
-      const config = await BotConfig.getOrCreate();
-      const product = config.products[transaction.productIndex];
-      const linkToDeliver = transaction.driveLink || product?.driveLink;
-
-      if (linkToDeliver) {
-        await sendDriveLink(bot, chatId, linkToDeliver);
-      } else {
-        await bot.sendMessage(chatId, '✅ Pagamento confirmado! Entraremos em contato em breve para liberar o seu acesso.');
-      }
+      // Sempre entregamos o MASTER_DRIVE_LINK através do serviço
+      await sendDriveLink(bot, chatId, '');
       bot.answerCallbackQuery(query.id, { text: 'Pagamento confirmado!', show_alert: false });
     } else if (transaction.status === 'EXPIRED') {
       await bot.sendMessage(chatId, '⏰ Este PIX expirou. Deseja gerar um novo? Clique em um dos produtos acima.');

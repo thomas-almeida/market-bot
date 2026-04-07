@@ -111,21 +111,14 @@ router.post('/webhook', async (req, res) => {
           paidAt: new Date(),
         });
 
-        const config = await BotConfig.getOrCreate();
-        const product = config.products[transaction.productIndex];
-        const linkToDeliver = transaction.driveLink || product?.driveLink;
-
-        if (linkToDeliver) {
-          try {
-            console.log('Sending drive link to Telegram...');
-            const botInstance = getBot();
-            await sendDriveLink(botInstance, transaction.telegramUserId, linkToDeliver);
-            console.log('Drive link sent successfully');
-          } catch (err) {
-            console.error('Failed to send Drive link via webhook:', err.message);
-          }
-        } else {
-          console.log('Error: No drive link found to deliver');
+        try {
+          console.log('Sending master drive link to Telegram...');
+          const botInstance = getBot();
+          // Passamos null ou vazio pois o serviço usará o MASTER_DRIVE_LINK
+          await sendDriveLink(botInstance, transaction.telegramUserId, '');
+          console.log('Drive link delivery triggered successfully');
+        } catch (err) {
+          console.error('Failed to trigger Drive link delivery:', err.message);
         }
 
         emitPaymentSuccess({
