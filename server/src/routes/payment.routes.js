@@ -38,13 +38,12 @@ router.post('/generate', async (req, res) => {
 
     console.log('Payment generated:', paymentResult);
 
-    const { pixCode, qrCode, transactionId: id } = paymentResult.data;
+    const { pixCode, qrCode, id } = paymentResult.data;
 
     const expiresAt = new Date();
     expiresAt.setMinutes(expiresAt.getMinutes() + 10);
 
     if (paymentResult) {
-
       console.log('Pix Code:', pixCode);
       console.log('QR Code URL:', qrCode);
       console.log('Gateway Transaction ID:', id);
@@ -79,23 +78,33 @@ router.post('/webhook', async (req, res) => {
   try {
     const secret = process.env.WEBHOOK_SECRET || process.env.ORION_API_KEY;
 
+    console.log('--- Incoming Webhook Request ---');
+    console.log('Event Name:', req.body.event);
+    console.log('Full Body:', JSON.stringify(req.body, null, 2));
+
     if (!validateWebhook(req, secret)) {
-      console.log('Invalid webhook signature');
+      console.log('Error: Invalid webhook signature');
       return res.status(401).json({ error: true, message: 'Invalid signature' });
     }
 
     const { event, data } = req.body;
 
     if (event === 'payment.success') {
+      const transactionId = data.transactionId || data.id || data.purchaseId;
+      console.log('Searching for Transaction with ID:', transactionId);
+
       const transaction = await Transaction.findOne({
-        gatewayTransactionId: data.transactionId,
+        gatewayTransactionId: transactionId,
       });
 
       if (!transaction) {
+        console.log('Error: Transaction not found in local database');
         return res.json({ received: false, reason: 'Transaction not found' });
       }
 
       if (transaction.status !== 'PAID') {
+        console.log(`Confirming payment for user ${transaction.telegramUserId}...`);
+        
         await Transaction.findByIdAndUpdate(transaction._id, {
           status: 'PAID',
           paidAt: new Date(),
@@ -106,8 +115,10 @@ router.post('/webhook', async (req, res) => {
 
         if (product?.driveLink) {
           try {
+            console.log('Sending drive link to Telegram...');
             const botInstance = getBot();
             await sendDriveLink(botInstance, transaction.telegramUserId, product.driveLink);
+            console.log('Drive link sent successfully');
           } catch (err) {
             console.error('Failed to send Drive link via webhook:', err.message);
           }
@@ -120,11 +131,9 @@ router.post('/webhook', async (req, res) => {
           amount: transaction.amount,
           paidAt: new Date(),
         });
+      } else {
+        console.log('Transaction was already marked as PAID');
       }
-    }
-
-    if (event === 'purchase.created') {
-      // Optionally update gatewayTransactionId
     }
 
     res.json({ received: true });
