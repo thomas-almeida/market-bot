@@ -14,16 +14,30 @@ function getBot() {
 }
 
 function initBot(app) {
+  if (bot) return bot;
+
   const isDev = process.env.NODE_ENV !== 'production';
 
   if (isDev) {
     bot = new TelegramBot(process.env.TELEGRAM_TOKEN, { polling: true });
+    // Clear webhook if it was set, to avoid 409 Conflict
+    bot.deleteWebHook();
     console.log('Telegram bot running in polling mode');
+
+    // Silent polling errors in dev to avoid noise from rapid restarts
+    bot.on('polling_error', (err) => {
+      if (err.message.includes('EFATAL')) {
+        console.error('Fatal polling error:', err.message);
+      }
+    });
   } else {
-    const webhookUrl = process.env.TELEGRAM_WEBHOOK_URL;
-    bot = new TelegramBot(process.env.TELEGRAM_TOKEN, { webHook: { port: process.env.WEBHOOK_PORT || 8443 } });
+    // In production, we don't start a separate webhook server.
+    // We use the existing Express server to receive updates.
+    bot = new TelegramBot(process.env.TELEGRAM_TOKEN);
+    
+    const webhookUrl = `${process.env.SERVER_URL}/webhook/telegram`;
     bot.setWebHook(webhookUrl);
-    console.log(`Telegram bot running in webhook mode: ${webhookUrl}`);
+    console.log(`Telegram bot webhook set to: ${webhookUrl}`);
   }
 
   setupHandlers(bot);
