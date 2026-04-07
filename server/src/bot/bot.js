@@ -96,8 +96,6 @@ async function handleCallback(bot, query) {
 
   if (data.startsWith('buy_')) {
     await handleBuy(bot, query, chatId, userId);
-  } else if (data === 'copy_pix') {
-    bot.answerCallbackQuery(query.id, { text: 'Código copiado! Abra seu app de banco e cole o código PIX.', show_alert: false });
   } else if (data.startsWith('check_payment')) {
     await handleCheckPayment(bot, query, chatId, userId);
   }
@@ -135,13 +133,9 @@ async function handleBuy(bot, query, chatId, userId) {
     });
 
     // Send Copy & Paste code
-    await bot.sendMessage(chatId, `💠 Pague via Pix Copia e Cola (ou QR Code em alguns bancos):\n\n<code>${pixCode}</code> \n\n👆 Toque na chave PIX acima para copiá-la \n\nOu toque no botão abaixo para copiar. \n\n‼️ SE O BOT NAO ENTREGAR ME CONTATE \n\n Nao peça reembolso, caso o contrario nao ira ser entregue!! e pode ficar tranquilo que o pagamento é super discreto ❤`, {
+    await bot.sendMessage(chatId, `💠 Pague via Pix Copia e Cola (ou QR Code em alguns bancos):\n\n<pre>${pixCode}</pre>\n\n👆 Toque no código PIX acima para copiar\n\n‼️ SE O BOT NAO ENTREGAR ME CONTATE\n\nNao peça reembolso, caso o contrario nao ira ser entregue!! e pode ficar tranquilo que o pagamento é super discreto ❤`, {
       parse_mode: 'HTML',
-      reply_markup: {
-        inline_keyboard: [[
-          { text: '📋 Copiar código', callback_data: 'copy_pix' },
-        ]],
-      },
+      disable_web_page_preview: true,
     });
 
     // Send payment status button
