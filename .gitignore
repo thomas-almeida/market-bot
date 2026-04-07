@@ -1,0 +1,7 @@
+.claude
+client/node_modules
+server/node_modules
+.env
+*.log
+server/.env
+client/.env
