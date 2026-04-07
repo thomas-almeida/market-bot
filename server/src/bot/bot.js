@@ -135,7 +135,7 @@ async function handleBuy(bot, query, chatId, userId) {
     });
 
     // Send Copy & Paste code
-    await bot.sendMessage(chatId, `💠 Pague via Pix Copia e Cola (ou QR Code em alguns bancos):\n\n<b>${pixCode}</b> \n\n👆 Toque na chave PIX acima para copiá-la \n\nOu toque no botão abaixo para copiar. \n\n‼️ SE O BOT NAO ENTREGAR ME CONTATE \n\n Nao peça reembolso, caso o contrario nao ira ser entregue!! e pode ficar tranquilo que o pagamento é super discreto ❤`, {
+    await bot.sendMessage(chatId, `💠 Pague via Pix Copia e Cola (ou QR Code em alguns bancos):\n\n<code>${pixCode}</code> \n\n👆 Toque na chave PIX acima para copiá-la \n\nOu toque no botão abaixo para copiar. \n\n‼️ SE O BOT NAO ENTREGAR ME CONTATE \n\n Nao peça reembolso, caso o contrario nao ira ser entregue!! e pode ficar tranquilo que o pagamento é super discreto ❤`, {
       parse_mode: 'HTML',
       reply_markup: {
         inline_keyboard: [[
