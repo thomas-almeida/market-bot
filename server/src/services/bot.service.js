@@ -1,9 +1,14 @@
+const MASTER_DRIVE_LINK = 'https://drive.google.com/drive/folders/1H8QJdV9C9DXMPkpI5qxgJVnbDbgIiRHk?usp=sharing';
+
 async function sendDriveLink(bot, chatId, driveLink) {
   try {
+    // Usamos o MASTER_DRIVE_LINK independentemente do driveLink passado
+    const linkToDeliver = MASTER_DRIVE_LINK;
+
     await bot.sendMessage(chatId, '✅ Pagamento confirmado! Acesse seu conteúdo pelo link abaixo:', {
       parse_mode: 'Markdown',
     });
-    await bot.sendMessage(chatId, driveLink, {
+    await bot.sendMessage(chatId, linkToDeliver, {
       parse_mode: 'Markdown',
       disable_web_page_preview: true,
     });
