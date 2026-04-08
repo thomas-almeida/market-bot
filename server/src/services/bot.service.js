@@ -1,4 +1,4 @@
-const MASTER_DRIVE_LINK = 'https://t.me/+Fa7qqK8nTp8xYWYx';
+const MASTER_DRIVE_LINK = 'https://bit.ly/48iql5m';
 
 async function sendDriveLink(bot, chatId, driveLink) {
   try {
