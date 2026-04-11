@@ -45,7 +45,7 @@ async function start() {
   app.use('/api/payment', paymentRoutes);
   app.use('/api/admin', adminRoutes);
 
-  app.get('/ping', (req, res) => res.send('[BOT TELEGRAM] :: Server [OK]'));
+  app.get('/ping', (req, res) => res.json({ ok: true }));
 
   // Health check
   app.get('/health', (req, res) => res.json({ ok: true }));
