@@ -7,7 +7,7 @@ const cors = require('cors');
 const connectDB = require('./config/db');
 const { seedBotConfig } = require('./config/seed');
 const { initSocketServer } = require('./services/socket.service');
-const { initBot } = require('./bot/bot');
+const { initAllBots, getBot } = require('./bot/manager');
 const { startExpireJobs } = require('./jobs/expireTransactions');
 
 const paymentRoutes = require('./routes/payment.routes');
@@ -31,13 +31,14 @@ async function start() {
   initSocketServer(server);
 
   // Routes
-  app.use('/webhook/telegram', express.json(), (req, res) => {
+  app.post('/webhook/telegram/:botId', (req, res) => {
     try {
-      if (process.env.NODE_ENV !== 'production') return res.sendStatus(200);
-      const bot = require('./bot/bot');
-      bot.getBot().processUpdate(req.body);
+      const { botId } = req.params;
+      const bot = getBot(botId);
+      bot.processUpdate(req.body);
       res.sendStatus(200);
     } catch (err) {
+      console.error('Webhook error:', err.message);
       res.sendStatus(200);
     }
   });
@@ -45,7 +46,7 @@ async function start() {
   app.use('/api/payment', paymentRoutes);
   app.use('/api/admin', adminRoutes);
 
-  app.get('/ping', (req, res) => res.json({ ok: true }));
+  app.get('/ping', (req, res) => res.send('[BOT TELEGRAM] :: Server [OK]'));
 
   // Health check
   app.get('/health', (req, res) => res.json({ ok: true }));
@@ -53,8 +54,8 @@ async function start() {
   // Start cron jobs
   startExpireJobs();
 
-  // Start bot
-  initBot(app);
+  // Start all bots
+  await initAllBots();
 
   // Start server
   const port = process.env.PORT || 3001;

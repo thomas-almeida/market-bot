@@ -6,77 +6,97 @@ const { getWelcomeMessage } = require('./messages');
 const { sendDriveLink } = require('../services/bot.service');
 const axios = require('axios');
 
-let bot;
+const bots = new Map();
 
-function getBot() {
-  if (!bot) throw new Error('Bot not initialized');
+function getBot(botId) {
+  const bot = bots.get(botId.toString());
+  if (!bot) throw new Error(`Bot ${botId} not initialized`);
   return bot;
 }
 
-function initBot(app) {
-  if (bot) return bot;
+async function initAllBots() {
+  const configs = await BotConfig.find({ active: true });
+  console.log(`Initializing ${configs.length} bots...`);
+  for (const config of configs) {
+    try {
+      await addBot(config);
+    } catch (err) {
+      console.error(`Failed to initialize bot ${config.name}:`, err.message);
+    }
+  }
+}
 
+async function addBot(config) {
   const isDev = process.env.NODE_ENV !== 'production';
+  let bot;
 
   if (isDev) {
-    bot = new TelegramBot(process.env.TELEGRAM_TOKEN, { polling: true });
-    // Clear webhook if it was set, to avoid 409 Conflict
-    bot.deleteWebHook();
-    console.log('Telegram bot running in polling mode');
+    bot = new TelegramBot(config.token, { polling: true });
+    await bot.deleteWebHook();
+    console.log(`Bot ${config.name} running in polling mode`);
 
-    // Silent polling errors in dev to avoid noise from rapid restarts
     bot.on('polling_error', (err) => {
       if (err.message.includes('EFATAL')) {
-        console.error('Fatal polling error:', err.message);
+        console.error(`Fatal polling error for ${config.name}:`, err.message);
       }
     });
   } else {
-    // In production, we don't start a separate webhook server.
-    // We use the existing Express server to receive updates.
-    bot = new TelegramBot(process.env.TELEGRAM_TOKEN);
-    
-    const webhookUrl = `${process.env.SERVER_URL}/webhook/telegram`;
-    bot.setWebHook(webhookUrl);
-    console.log(`Telegram bot webhook set to: ${webhookUrl}`);
+    bot = new TelegramBot(config.token);
+    const webhookUrl = `${process.env.SERVER_URL}/webhook/telegram/${config._id}`;
+    await bot.setWebHook(webhookUrl);
+    console.log(`Bot ${config.name} webhook set to: ${webhookUrl}`);
   }
 
-  setupHandlers(bot);
+  setupHandlers(bot, config._id);
+  bots.set(config._id.toString(), bot);
   return bot;
 }
 
-function setupHandlers(bot) {
+function stopBot(botId) {
+  const bot = bots.get(botId.toString());
+  if (bot) {
+    if (bot.isPolling()) {
+      bot.stopPolling();
+    }
+    bots.delete(botId.toString());
+  }
+}
+
+function setupHandlers(bot, botId) {
   bot.on('message', async (msg) => {
     try {
-      await handleStart(bot, msg);
+      await handleStart(bot, botId, msg);
     } catch (err) {
-      console.error('Bot message error:', err.message);
+      console.error(`Bot ${botId} message error:`, err.message);
     }
   });
 
   bot.on('callback_query', async (query) => {
     try {
-      await handleCallback(bot, query);
+      await handleCallback(bot, botId, query);
     } catch (err) {
-      console.error('Bot callback error:', err.message);
+      console.error(`Bot ${botId} callback error:`, err.message);
     }
   });
 }
 
-async function handleStart(bot, msg) {
+async function handleStart(bot, botId, msg) {
   const chatId = msg.chat.id;
   const userId = String(msg.from.id);
   const firstName = msg.from.first_name || '';
   const username = msg.from.username || '';
 
   // Create session
-  await Session.create({ telegramUserId: userId, username, firstName });
+  await Session.create({ botId, telegramUserId: userId, username, firstName });
 
-  // Get config
-  const config = await BotConfig.getOrCreate();
+  // Get config for this specific bot
+  const config = await BotConfig.findById(botId);
+  if (!config) return;
+
   const welcomeMsg = getWelcomeMessage(config);
 
   // Send images if configured
-  const welcomeImageUrls = Array.isArray(config.welcomeImageUrls) ? config.welcomeImageUrls : (config.welcomeImageUrl ? [config.welcomeImageUrl] : []);
+  const welcomeImageUrls = Array.isArray(config.welcomeImageUrls) ? config.welcomeImageUrls : [];
   for (const imageUrl of welcomeImageUrls) {
     if (imageUrl) {
       await bot.sendPhoto(chatId, imageUrl);
@@ -87,12 +107,7 @@ async function handleStart(bot, msg) {
   await bot.sendMessage(chatId, welcomeMsg, { parse_mode: 'HTML' });
 
   // Send product buttons
-  const products = config.products && config.products.length > 0
-    ? config.products
-    : [
-        { label: 'Pack de 50 conteúdos', price: 27.90, driveLink: 'https://drive.google.com/drive/folders/1H8QJdV9C9DXMPkpI5qxgJVnbDbgIiRHk?usp=sharing' },
-        { label: 'Pack de 20 conteúdos', price: 19.90, driveLink: 'https://drive.google.com/drive/folders/1H8QJdV9C9DXMPkpI5qxgJVnbDbgIiRHk?usp=sharing' },
-      ];
+  const products = config.products && config.products.length > 0 ? config.products : [];
 
   const inlineKeyboard = {
     inline_keyboard: products.map((p, i) => [
@@ -103,61 +118,46 @@ async function handleStart(bot, msg) {
   await bot.sendMessage(chatId, 'Quer se divertir ? Hoje eu to com um desconto especial!', { reply_markup: inlineKeyboard });
 }
 
-async function handleCallback(bot, query) {
+async function handleCallback(bot, botId, query) {
   const chatId = query.message.chat.id;
   const userId = String(query.from.id);
   const data = query.data;
 
-  // Respondemos imediatamente para remover o "loading" do botão no celular do usuário
   try {
     await bot.answerCallbackQuery(query.id).catch(() => {});
   } catch (e) {}
 
   if (data.startsWith('buy_')) {
-    await handleBuy(bot, query, chatId, userId);
+    await handleBuy(bot, botId, query, chatId, userId);
   } else if (data.startsWith('check_payment')) {
-    await handleCheckPayment(bot, query, chatId, userId);
+    await handleCheckPayment(bot, botId, query, chatId, userId);
   }
 }
 
-async function handleBuy(bot, query, chatId, userId) {
+async function handleBuy(bot, botId, query, chatId, userId) {
   const productIndex = parseInt(query.data.split('_')[1]);
 
-  // Get config to resolve the product
-  const config = await BotConfig.getOrCreate();
-  const products = config.products && config.products.length > 0
-    ? config.products
-    : [
-        { label: 'Pack de 50 conteúdos', price: 27.90, driveLink: 'https://drive.google.com/drive/folders/1H8QJdV9C9DXMPkpI5qxgJVnbDbgIiRHk?usp=sharing' },
-        { label: 'Pack de 20 conteúdos', price: 19.90, driveLink: 'https://drive.google.com/drive/folders/1H8QJdV9C9DXMPkpI5qxgJVnbDbgIiRHk?usp=sharing' },
-      ];
-
-  const product = products[productIndex];
-  if (!product) {
-    return; // Já respondemos o callback lá em cima
-  }
+  const config = await BotConfig.findById(botId);
+  if (!config || !config.products[productIndex]) return;
 
   try {
-    // Generate PIX via OrionPay
     const paymentResult = await axios.post(`${process.env.SERVER_URL || 'http://localhost:' + (process.env.PORT || 3001)}/api/payment/generate`, {
       telegramUserId: userId,
       productIndex,
+      botId: botId.toString()
     });
 
     const { pixCode, pixQrCodeUrl, transactionId } = paymentResult.data;
 
-    // Send QR Code image
     await bot.sendPhoto(chatId, pixQrCodeUrl, {
       caption: '💳 Escaneie o QR Code abaixo para pagar via PIX.',
     });
 
-    // Send Copy & Paste code
     await bot.sendMessage(chatId, `💠 Pague via Pix Copia e Cola (ou QR Code em alguns bancos):\n\n<pre>${pixCode}</pre>\n\n👆 Toque no código PIX acima para copiar\n\n‼️ SE O BOT NAO ENTREGAR ME CONTATE\n\nNao peça reembolso, caso o contrario nao ira ser entregue!! e pode ficar tranquilo que o pagamento é super discreto ❤`, {
       parse_mode: 'HTML',
       disable_web_page_preview: true,
     });
 
-    // Send payment status button
     await bot.sendMessage(chatId, '⏳ Aguardando confirmação do pagamento...', {
       reply_markup: {
         inline_keyboard: [[
@@ -171,14 +171,13 @@ async function handleBuy(bot, query, chatId, userId) {
   }
 }
 
-async function handleCheckPayment(bot, query, chatId, userId) {
+async function handleCheckPayment(bot, botId, query, chatId, userId) {
   const parts = query.data.split('|');
   const transactionId = parts[1];
 
   if (!transactionId) return;
 
   try {
-    console.log('Checking payment for transaction:', transactionId);
     const transaction = await Transaction.findById(transactionId);
 
     if (!transaction) {
@@ -187,8 +186,8 @@ async function handleCheckPayment(bot, query, chatId, userId) {
     }
 
     if (transaction.status === 'PAID') {
-      // Sempre entregamos o MASTER_DRIVE_LINK através do serviço
-      await sendDriveLink(bot, chatId, '');
+      const config = await BotConfig.findById(botId);
+      await sendDriveLink(bot, chatId, config?.masterDriveLink);
     } else if (transaction.status === 'EXPIRED') {
       await bot.sendMessage(chatId, '⏰ Este PIX expirou. Deseja gerar um novo? Clique em um dos produtos acima.');
     } else {
@@ -200,4 +199,4 @@ async function handleCheckPayment(bot, query, chatId, userId) {
   }
 }
 
-module.exports = { initBot, getBot };
+module.exports = { initAllBots, getBot, addBot, stopBot };

@@ -16,7 +16,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
-      <Route path="/config" element={<PrivateRoute><BotConfig /></PrivateRoute>} />
+      <Route path="/config/:botId" element={<PrivateRoute><BotConfig /></PrivateRoute>} />
       <Route path="/transactions" element={<PrivateRoute><Transactions /></PrivateRoute>} />
     </Routes>
   );

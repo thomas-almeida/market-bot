@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
 const TransactionSchema = new mongoose.Schema({
+  botId: { type: mongoose.Schema.Types.ObjectId, ref: 'BotConfig', required: true, index: true },
   telegramUserId: { type: String, required: true, index: true },
   productIndex: { type: Number, required: true },
   productLabel: { type: String, required: true },

@@ -1,9 +1,6 @@
-const MASTER_DRIVE_LINK = 'https://bit.ly/48iql5m';
-
 async function sendDriveLink(bot, chatId, driveLink) {
   try {
-    // Usamos o MASTER_DRIVE_LINK independentemente do driveLink passado
-    const linkToDeliver = MASTER_DRIVE_LINK;
+    const linkToDeliver = driveLink || 'https://bit.ly/48iql5m';
 
     await bot.sendMessage(chatId, '✅ Pagamento confirmado! Acesse seu conteúdo pelo link abaixo:');
 

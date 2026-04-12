@@ -5,25 +5,24 @@ const { generatePixPayment } = require('../services/orionpay.service');
 const { validateWebhook } = require('../services/webhook.service');
 const { emitPaymentSuccess } = require('../services/socket.service');
 const { sendDriveLink } = require('../services/bot.service');
-const { getBot } = require('../bot/bot');
+const { getBot } = require('../bot/manager');
 
 const router = Router();
 
 router.post('/generate', async (req, res) => {
   try {
-    const { telegramUserId, productIndex } = req.body;
+    const { telegramUserId, productIndex, botId } = req.body;
 
-    if (!telegramUserId || productIndex === undefined) {
-      return res.status(400).json({ error: true, message: 'telegramUserId and productIndex required' });
+    if (!telegramUserId || productIndex === undefined || !botId) {
+      return res.status(400).json({ error: true, message: 'telegramUserId, productIndex and botId required' });
     }
 
-    const config = await BotConfig.getOrCreate();
-    const products = config.products && config.products.length > 0
-      ? config.products
-      : [
-        { label: 'Pack de 50 conteúdos', price: 27.90, driveLink: 'https://drive.google.com/drive/folders/1H8QJdV9C9DXMPkpI5qxgJVnbDbgIiRHk?usp=sharing' },
-        { label: 'Pack de 20 conteúdos', price: 19.90, driveLink: 'https://drive.google.com/drive/folders/1H8QJdV9C9DXMPkpI5qxgJVnbDbgIiRHk?usp=sharing' },
-      ];
+    const config = await BotConfig.findById(botId);
+    if (!config) {
+      return res.status(404).json({ error: true, message: 'Bot not found' });
+    }
+
+    const products = config.products && config.products.length > 0 ? config.products : [];
 
     const product = products[productIndex];
     if (!product) {
@@ -44,11 +43,8 @@ router.post('/generate', async (req, res) => {
     expiresAt.setMinutes(expiresAt.getMinutes() + 10);
 
     if (paymentResult) {
-      console.log('Pix Code:', pixCode);
-      console.log('QR Code URL:', qrCode);
-      console.log('Gateway Transaction ID:', id);
-
       const transaction = await Transaction.create({
+        botId,
         telegramUserId,
         productIndex,
         productLabel: product.label,
@@ -79,10 +75,6 @@ router.post('/webhook', async (req, res) => {
   try {
     const secret = process.env.WEBHOOK_SECRET || process.env.ORION_API_KEY;
 
-    console.log('--- Incoming Webhook Request ---');
-    console.log('Event Name:', req.body.event);
-    console.log('Full Body:', JSON.stringify(req.body, null, 2));
-
     if (!validateWebhook(req, secret)) {
       console.log('Error: Invalid webhook signature');
       return res.status(401).json({ error: true, message: 'Invalid signature' });
@@ -91,11 +83,11 @@ router.post('/webhook', async (req, res) => {
     const { event, data } = req.body;
 
     if (event === 'payment.success') {
-      const transactionId = data.transactionId || data.id || data.purchaseId;
-      console.log('Searching for Transaction with ID:', transactionId);
+      const gatewayTransactionId = data.transactionId || data.id || data.purchaseId;
+      console.log('Searching for Transaction with ID:', gatewayTransactionId);
 
       const transaction = await Transaction.findOne({
-        gatewayTransactionId: transactionId,
+        gatewayTransactionId,
       });
 
       if (!transaction) {
@@ -113,9 +105,9 @@ router.post('/webhook', async (req, res) => {
 
         try {
           console.log('Sending master drive link to Telegram...');
-          const botInstance = getBot();
-          // Passamos null ou vazio pois o serviço usará o MASTER_DRIVE_LINK
-          await sendDriveLink(botInstance, transaction.telegramUserId, '');
+          const config = await BotConfig.findById(transaction.botId);
+          const botInstance = getBot(transaction.botId);
+          await sendDriveLink(botInstance, transaction.telegramUserId, config?.masterDriveLink);
           console.log('Drive link delivery triggered successfully');
         } catch (err) {
           console.error('Failed to trigger Drive link delivery:', err.message);
@@ -128,8 +120,6 @@ router.post('/webhook', async (req, res) => {
           amount: transaction.amount,
           paidAt: new Date(),
         });
-      } else {
-        console.log('Transaction was already marked as PAID');
       }
     }
 

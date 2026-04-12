@@ -9,52 +9,102 @@ const { uploadImage } = require('../services/cloudinary.service');
 const cloudinary = require('cloudinary').v2;
 const adminAuth = require('../middleware/adminAuth');
 
+const { addBot, stopBot } = require('../bot/manager');
+
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
-// --- Auth (no middleware required) ---
-router.post('/login', async (req, res) => {
+// --- Bots Management (protected) ---
+
+router.get('/bots', adminAuth, async (req, res) => {
   try {
-    const { email } = req.body;
-    if (!email) {
-      return res.status(400).json({ error: true, message: 'Email required' });
+    const bots = await BotConfig.find().sort({ updatedAt: -1 });
+    res.json(bots);
+  } catch (err) {
+    res.status(500).json({ error: true, message: 'Failed to list bots' });
+  }
+});
+
+router.post('/bots', adminAuth, async (req, res) => {
+  try {
+    const { name, token, masterDriveLink } = req.body;
+    if (!name || !token) {
+      return res.status(400).json({ error: true, message: 'Name and Token required' });
     }
 
-    const token = uuidv4();
-    const expiresAt = new Date();
-    expiresAt.setHours(expiresAt.getHours() + 24);
+    const bot = await BotConfig.create({
+      name,
+      token,
+      masterDriveLink: masterDriveLink || '',
+      welcomeMessage: 'Olá! 👋 Confira nossos packs exclusivos abaixo.',
+      products: [
+        { label: 'Pack de 50 conteúdos', price: 27.90, driveLink: '' },
+        { label: 'Pack de 20 conteúdos', price: 19.90, driveLink: '' },
+      ],
+    });
 
-    await AdminToken.create({ email, token, expiresAt });
+    await addBot(bot);
 
-    res.json({ token, expiresAt });
+    res.json(bot);
   } catch (err) {
-    console.error('Admin login error:', err.message);
-    res.status(500).json({ error: true, message: 'Failed to generate token' });
+    console.error('Create bot error:', err.message);
+    res.status(500).json({ error: true, message: 'Failed to create bot' });
+  }
+});
+
+router.delete('/bots/:botId', adminAuth, async (req, res) => {
+  try {
+    const { botId } = req.params;
+    const bot = await BotConfig.findById(botId);
+    if (!bot) return res.status(404).json({ error: true, message: 'Bot not found' });
+
+    stopBot(botId);
+    await BotConfig.deleteOne({ _id: botId });
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: true, message: 'Failed to delete bot' });
   }
 });
 
 // --- Bot Config (protected) ---
 
-router.get('/config', adminAuth, async (req, res) => {
+router.get('/config/:botId', adminAuth, async (req, res) => {
   try {
-    const config = await BotConfig.getOrCreate();
+    const config = await BotConfig.findById(req.params.botId);
+    if (!config) return res.status(404).json({ error: true, message: 'Bot not found' });
     res.json(config);
   } catch (err) {
     res.status(500).json({ error: true, message: 'Failed to get config' });
   }
 });
 
-router.put('/config', adminAuth, async (req, res) => {
+router.put('/config/:botId', adminAuth, async (req, res) => {
   try {
-    const { welcomeMessage, welcomeImageUrls, products } = req.body;
-    const config = await BotConfig.getOrCreate();
+    const { welcomeMessage, welcomeImageUrls, products, name, token, active, masterDriveLink } = req.body;
+    const config = await BotConfig.findById(req.params.botId);
+    if (!config) return res.status(404).json({ error: true, message: 'Bot not found' });
 
+    const tokenChanged = token && token !== config.token;
+
+    if (name !== undefined) config.name = name;
+    if (token !== undefined) config.token = token;
+    if (active !== undefined) config.active = active;
     if (welcomeMessage !== undefined) config.welcomeMessage = welcomeMessage;
     if (welcomeImageUrls !== undefined) config.welcomeImageUrls = welcomeImageUrls;
     if (products !== undefined) config.products = products;
+    if (masterDriveLink !== undefined) config.masterDriveLink = masterDriveLink;
 
     config.updatedAt = new Date();
     await config.save();
+
+    if (tokenChanged || active === false) {
+      stopBot(config._id);
+    }
+    
+    if (config.active && (tokenChanged || !config.active)) {
+      await addBot(config);
+    }
 
     res.json(config);
   } catch (err) {
@@ -119,7 +169,7 @@ router.get('/transactions', adminAuth, async (req, res) => {
 
     const skip = (page - 1) * limit;
     const [transactions, total] = await Promise.all([
-      Transaction.find(filter).sort({ createdAt: -1 }).skip(skip).limit(Number(limit)),
+      Transaction.find(filter).populate('botId', 'name').sort({ createdAt: -1 }).skip(skip).limit(Number(limit)),
       Transaction.countDocuments(filter),
     ]);
 
@@ -134,7 +184,7 @@ router.get('/transactions', adminAuth, async (req, res) => {
 
 router.get('/sessions', adminAuth, async (req, res) => {
   try {
-    const sessions = await Session.find().sort({ startedAt: -1 }).limit(50);
+    const sessions = await Session.find().populate('botId', 'name').sort({ startedAt: -1 }).limit(50);
     res.json({ sessions });
   } catch (err) {
     console.error('List sessions error:', err.message);

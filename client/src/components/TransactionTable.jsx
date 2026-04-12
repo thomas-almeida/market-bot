@@ -14,6 +14,7 @@ export default function TransactionTable({ transactions }) {
       <table className="w-full text-sm text-left text-gray-300">
         <thead className="text-xs text-gray-400 border-b border-gray-700">
           <tr>
+            <th className="px-4 py-3">Bot</th>
             <th className="px-4 py-3">ID</th>
             <th className="px-4 py-3">Usuário</th>
             <th className="px-4 py-3">Produto</th>
@@ -25,6 +26,7 @@ export default function TransactionTable({ transactions }) {
         <tbody>
           {transactions.map((t) => (
             <tr key={t._id} className="border-b border-gray-700/50 hover:bg-gray-800/30">
+              <td className="px-4 py-3 font-medium text-xs text-blue-400">{t.botId?.name || '---'}</td>
               <td className="px-4 py-3 font-mono text-xs">{t._id.slice(-6)}</td>
               <td className="px-4 py-3">{t.telegramUserId}</td>
               <td className="px-4 py-3">{t.productLabel}</td>

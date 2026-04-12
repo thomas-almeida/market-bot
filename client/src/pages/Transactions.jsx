@@ -42,7 +42,6 @@ export default function Transactions() {
           <h1 className="text-2xl font-bold text-white">Transações</h1>
           <div className="space-x-3 text-sm">
             <Link to="/" className="text-blue-400 hover:underline">Dashboard</Link>
-            <Link to="/config" className="text-blue-400 hover:underline">Configuração</Link>
           </div>
         </div>
 
